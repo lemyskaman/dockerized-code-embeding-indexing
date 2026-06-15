@@ -15,6 +15,8 @@ The implementation is constrained by the research decisions: the toolkit must li
 - Use host-installed Ollama for embeddings and local chat models.
 - Pin upstream `qdrant-mcp-server` v3.3.5+ so PR #60 fixes are inherited without carrying a fork.
 - Keep `nomic-embed-text:v1.5` as the default embedding model and document an optional `mxbai-embed-large` evaluation path.
+- Use non-standard host port mappings for all host-accessible services, while keeping standard container ports internally.
+- Expose both `qdrant-mcp-server` and `better-qdrant-mcp-server` to MCP clients by default.
 - Provide reusable CLI scripts, MCP client templates, documentation, and validation checks.
 
 **Non-Goals:**
@@ -36,6 +38,34 @@ Alternatives considered:
 
 - Modifying the host project's `docker-compose.yaml` directly would be simpler but breaks portability.
 - A standalone compose file would avoid merge behaviour but makes lifecycle management less discoverable.
+
+### Decision: Resolve workspace path through project configuration first
+
+The workspace mount should normally point at the project's source directory, commonly `src`, but it must be configurable. The implementation should prefer a project-level `.nsv` file when it exists, then allow a local `.env` override, then fall back to the repository root, and finally `${HOME}/projects`. This keeps shared project configuration portable while still allowing local developer overrides.
+
+Alternatives considered:
+
+- Hard-coding `${HOME}/projects` is simple but too broad and not project-specific.
+- Hard-coding the repository root works for many projects but fails when only `src` should be exposed.
+- Using only `.env` works locally but is not a good shared project configuration source.
+
+### Decision: Use non-standard host port mappings
+
+Host-accessible services must not expose their standard ports. The implementation should map host ports to non-standard values while keeping the standard ports inside containers: PostgreSQL `15432:5432`, Qdrant REST `16333:6333`, Qdrant gRPC `16334:6334`, and Aspire Dashboard `18888:18888` plus `18889:18889`.
+
+Alternatives considered:
+
+- Standard host ports such as `5432`, `6333`, and `6334` are easier to remember but conflict with existing developer services.
+- Non-standard ports add configuration overhead but make the overlay safer to drop into arbitrary projects.
+
+### Decision: Expose both qdrant and better-qdrant MCP servers by default
+
+The first implementation should expose both `qdrant-mcp-server` and `better-qdrant-mcp-server` to MCP clients. The primary code indexing server is the main value, but document RAG is useful early and can be improved later.
+
+Alternatives considered:
+
+- Exposing only qdrant-mcp-server reduces initial client configuration complexity but delays document RAG support.
+- Exposing both servers by default keeps the implemented capability set aligned with the research stack.
 
 ### Decision: Use one `vector-stack` container for Qdrant and MCP servers
 
@@ -67,11 +97,11 @@ Alternatives considered:
 
 ### Decision: Use `nomic-embed-text:v1.5` as default
 
-`nomic-embed-text:v1.5` is small, fast, supported by the MCP servers, has an 8K context window, and was validated with the fixed qdrant-mcp-server path. It remains the default until a side-by-side benchmark proves `mxbai-embed-large` improves retrieval enough to justify larger size, slower inference, 1024-dimensional vectors, and 512-token context.
+`nomic-embed-text:v1.5` is small, fast, supported by the MCP servers, has an 8K context window, and was validated with the fixed qdrant-mcp-server path. It remains the default fallback when `mxbai-embed-large` cannot be made to work reliably. The implementation should first investigate whether `mxbai-embed-large` can be used with the stack; if it cannot, use the already working `nomic-embed-text:v1.5` path from the example project notes.
 
 Alternatives considered:
 
-- `mxbai-embed-large` has higher reported MTEB English quality but requires stricter chunking and separate Qdrant collections.
+- `mxbai-embed-large` should be investigated first, but if it cannot be made to work reliably it remains an optional future upgrade rather than the first implementation dependency.
 - `nomic-embed-code` is stronger for code but too large for many developer machines.
 - `qwen3-embedding` is future-facing but not the first implementation choice.
 
@@ -100,23 +130,27 @@ Alternatives considered:
 - [Host Ollama connectivity] → Use `host.docker.internal` with an `OLLAMA_HOST_IP` override for Rancher Desktop, Lima, and Podman edge cases.
 - [External volume loss] → Create volumes before first run or through `start.sh`; document reset and hard-reset commands.
 - [Aperio logging crash] → Patch `logger.warning()` to `logger.warn()` during Docker build until upstream resolves it.
-- [mxbai model switch] → Require a separate collection and reindex because vector dimensions and values are incompatible with nomic indexes.
+- [mxbai model switch] → Investigate whether `mxbai-embed-large` can be made to work; if not, keep the proven `nomic-embed-text:v1.5` path from the example project notes.
 - [Tree-sitter native compilation] → Pin Node.js 20 and document native build tool requirements.
 - [MCP client config drift] → Provide templates for VS Code, Claude Code/Claude Desktop, and Cursor and document how to copy them.
+- [Workspace path drift] → Prefer project `.nsv` configuration, then local `.env`, then repository root, then `${HOME}/projects`; default to `src` when it exists.
+- [Host port conflicts] → Use non-standard host port mappings for PostgreSQL, Qdrant, and Aspire Dashboard.
 
 ## Migration Plan
 
 1. Create the toolkit files under `dev-docker-env/`.
 2. Add root `docker-compose.override.yaml` and `README.md`.
 3. Create external volumes with `docker volume create pgdata`, `docker volume create qdrant-storage`, and `docker volume create aperio-cache`, or use `start.sh`.
-4. Pull required Ollama models: `ollama pull nomic-embed-text:v1.5` and `ollama pull qwen2.5:3b`; optionally pull `mxbai-embed-large`.
-5. Start the stack with `./dev-docker-env/scripts/start.sh` or `docker compose up -d`.
-6. Copy the appropriate MCP client template into the IDE/client configuration.
-7. Run validation checks for service health, MCP connectivity, code indexing, search, memory persistence, and reset/reindex workflows.
-8. Roll back by running `docker compose down`, removing the override file, and restoring prior MCP client configuration.
+4. Configure the workspace path through project `.nsv` when available; otherwise use local `.env`, the repository root, or `${HOME}/projects` as fallbacks.
+5. Pull required Ollama models: `ollama pull nomic-embed-text:v1.5` and `ollama pull qwen2.5:3b`; investigate `mxbai-embed-large` before deciding whether to use it as the default.
+6. Start the stack with `./dev-docker-env/scripts/start.sh` or `docker compose up -d`.
+7. Copy the appropriate MCP client template into the IDE/client configuration, including both qdrant and better-qdrant MCP servers by default.
+8. Run validation checks for service health, MCP connectivity, code indexing, search, memory persistence, and reset/reindex workflows.
+9. Roll back by running `docker compose down`, removing the override file, and restoring prior MCP client configuration.
 
-## Open Questions
+## Resolved Decisions
 
-- Which host projects directory should be mounted by default: `${HOME}/projects`, the repository root, or a configurable `WORKSPACE_PATH`?
-- Should the first implementation expose both `qdrant-mcp-server` and `better-qdrant-mcp-server` to clients by default, or only the primary code indexing server?
-- Should validation include an automated benchmark comparing `nomic-embed-text:v1.5` and `mxbai-embed-large`, or only document the benchmark procedure?
+- Workspace path is configurable, with precedence: project `.nsv` file, local `.env`, repository root, then `${HOME}/projects`; default to `src` when it exists.
+- Expose both `qdrant-mcp-server` and `better-qdrant-mcp-server` to clients by default.
+- Investigate `mxbai-embed-large` feasibility first; if it cannot be made reliable, use the proven `nomic-embed-text:v1.5` path from the example project notes.
+- Use non-standard host port mappings for all host-accessible services.
