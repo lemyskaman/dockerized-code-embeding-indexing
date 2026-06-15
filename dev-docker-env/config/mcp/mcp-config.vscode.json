@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "qdrant": {
+      "type": "stdio",
+      "command": "docker",
+      "args": ["exec", "-i", "vector-stack", "mcp-qdrant"]
+    },
+    "better-qdrant": {
+      "type": "stdio",
+      "command": "docker",
+      "args": ["exec", "-i", "vector-stack", "mcp-better-qdrant"]
+    },
+    "aperio": {
+      "type": "stdio",
+      "command": "docker",
+      "args": ["exec", "-i", "vector-stack", "mcp-aperio"]
+    }
+  }
+}

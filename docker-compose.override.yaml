@@ -1,0 +1,75 @@
+services:
+  postgres:
+    build:
+      context: ./dev-docker-env
+      dockerfile: dockerfiles/Dockerfile.postgres-pgvector
+    container_name: ai-postgres
+    environment:
+      POSTGRES_USER: aperio
+      POSTGRES_PASSWORD: aperio_local
+      POSTGRES_DB: aperio
+    ports:
+      - "25432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./dev-docker-env/config/postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aperio -d aperio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  vector-stack:
+    container_name: vector-stack
+    build:
+      context: ./dev-docker-env
+      dockerfile: dockerfiles/Dockerfile.vector-stack
+    extra_hosts:
+      - "host.docker.internal:${OLLAMA_HOST_IP:-host-gateway}"
+    environment:
+      QDRANT_URL: http://127.0.0.1:6333
+      AI_PROVIDER: ollama
+      WORKSPACE_PATH: ${WORKSPACE_PATH:-${REPOSITORY_ROOT:-${HOME}/projects}}
+    ports:
+      - "26333:6333"
+      - "26334:6334"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+      - aperio-cache:/root/.cache/aperio
+      - ${WORKSPACE_PATH:-${REPOSITORY_ROOT:-${HOME}/projects}}:/workspace:ro
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:latest
+    container_name: aspire-dashboard
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+      Dashboard__Frontend__AuthMode: Unsecured
+    ports:
+      - "28888:18888"
+      - "28889:18889"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    external: true
+  qdrant-storage:
+    external: true
+  aperio-cache:
+    external: true

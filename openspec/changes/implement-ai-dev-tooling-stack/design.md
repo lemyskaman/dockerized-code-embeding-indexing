@@ -51,7 +51,7 @@ Alternatives considered:
 
 ### Decision: Use non-standard host port mappings
 
-Host-accessible services must not expose their standard ports. The implementation should map host ports to non-standard values while keeping the standard ports inside containers: PostgreSQL `15432:5432`, Qdrant REST `16333:6333`, Qdrant gRPC `16334:6334`, and Aspire Dashboard `18888:18888` plus `18889:18889`.
+Host-accessible services must not expose their standard ports. The implementation should map host ports to non-standard values while keeping the standard ports inside containers: PostgreSQL `25432:5432`, Qdrant REST `26333:6333`, Qdrant gRPC `26334:6334`, and Aspire Dashboard `28888:18888` plus `28889:18889`.
 
 Alternatives considered:
 
@@ -88,7 +88,7 @@ Alternatives considered:
 
 ### Decision: Keep Ollama on the host
 
-Embedding and chat models are too large to bake into the container image, and a host Ollama instance can serve multiple projects. Containers reach the host through `host.docker.internal`.
+Embedding and chat models are too large to bake into the container image, and a host Ollama instance can serve multiple projects. Containers first reach the host through `host.docker.internal`; when that endpoint is unavailable, `start.sh` auto-detects the host LAN IP and recreates `vector-stack` with `OLLAMA_HOST_IP`.
 
 Alternatives considered:
 
@@ -153,4 +153,4 @@ Alternatives considered:
 - Workspace path is configurable, with precedence: project `.nsv` file, local `.env`, repository root, then `${HOME}/projects`; default to `src` when it exists.
 - Expose both `qdrant-mcp-server` and `better-qdrant-mcp-server` to clients by default.
 - Investigate `mxbai-embed-large` feasibility first; if it cannot be made reliable, use the proven `nomic-embed-text:v1.5` path from the example project notes.
-- Use non-standard host port mappings for all host-accessible services.
+- Use non-standard host port mappings for all host-accessible services: PostgreSQL `25432`, Qdrant REST `26333`, Qdrant gRPC `26334`, Aspire HTTP `28888`, and Aspire OTLP `28889`.

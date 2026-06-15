@@ -1,0 +1,6 @@
+FROM postgres:18-alpine
+
+RUN apk add --no-cache postgresql-pgvector \
+    && cp /usr/lib/postgresql18/vector.so /usr/local/lib/postgresql/ \
+    && cp /usr/share/postgresql18/extension/vector* /usr/local/share/postgresql/extension/ \
+    && apk del postgresql-pgvector

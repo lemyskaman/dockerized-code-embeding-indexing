@@ -1,0 +1,10 @@
+CREATE ROLE aperio WITH LOGIN PASSWORD 'aperio_local';
+CREATE DATABASE aperio OWNER aperio;
+GRANT ALL PRIVILEGES ON DATABASE aperio TO aperio;
+
+\connect aperio
+
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+GRANT ALL ON SCHEMA public TO aperio;

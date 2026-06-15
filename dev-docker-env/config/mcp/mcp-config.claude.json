@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "qdrant": {
+      "command": "docker",
+      "args": ["exec", "-i", "vector-stack", "mcp-qdrant"]
+    },
+    "better-qdrant": {
+      "command": "docker",
+      "args": ["exec", "-i", "vector-stack", "mcp-better-qdrant"]
+    },
+    "aperio": {
+      "command": "docker",
+      "args": ["exec", "-i", "vector-stack", "mcp-aperio"]
+    }
+  }
+}
